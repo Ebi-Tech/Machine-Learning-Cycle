@@ -12,7 +12,7 @@ from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from sklearn.metrics import classification_report, confusion_matrix
 from tensorflow import keras
@@ -46,6 +46,16 @@ logger.info(f"Loaded model from {MODEL_PATH}")
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.route("/")
+def serve_frontend():
+    return send_from_directory("frontend", "index.html")
+
+
+@app.route("/frontend/<path:filename>")
+def serve_static(filename):
+    return send_from_directory("frontend", filename)
 
 
 def allowed_file(filename):

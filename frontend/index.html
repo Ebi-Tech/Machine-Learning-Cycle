@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Handwritten Digit Recognition Pipeline</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: '#161822',
+            base: '#0f1117',
+            border: '#1e2030',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-base text-gray-200 min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- Header -->
+    <header class="text-center space-y-1">
+      <div class="flex items-center justify-center gap-3">
+        <h1 class="text-3xl font-bold">Handwritten Digit Recognition Pipeline</h1>
+        <span id="live-badge" class="hidden text-xs px-3 py-1 rounded-full text-white bg-gradient-to-r from-green-500 to-emerald-400 animate-pulse">
+          Live
+        </span>
+      </div>
+      <p class="text-sm text-gray-400">Automated Assessment Grading for Distance Learning</p>
+    </header>
+
+    <!-- Stats bar -->
+    <div class="stats shadow bg-surface border border-border w-full overflow-x-auto">
+      <div class="stat">
+        <div class="stat-title">Status</div>
+        <div class="stat-value text-lg flex items-center gap-2">
+          <span id="status-dot" class="hidden w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          <span id="status-badge" class="badge badge-error">Offline</span>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Uptime</div>
+        <div id="stat-uptime" class="stat-value text-lg">--</div>
+        <div class="stat-desc">since server start</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Last Trained</div>
+        <div id="stat-last-trained" class="stat-value text-base">--</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Parameters</div>
+        <div id="stat-params" class="stat-value text-lg">--</div>
+      </div>
+    </div>
+
+    <!-- Two column grid: Prediction + Retrain -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Prediction Panel -->
+      <div class="card bg-surface border border-border shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">✏️ Predict a Digit</h2>
+
+          <label id="drop-zone" for="file-input"
+                 class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-primary transition block">
+            <input type="file" id="file-input" accept=".png,.jpg,.jpeg" class="hidden" />
+            <span class="text-gray-400">Drop an image here or click to browse</span>
+          </label>
+
+          <div id="predict-result" class="hidden space-y-4 mt-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+              <div class="flex justify-center">
+                <img id="preview-image" src="" alt="preview"
+                     class="border border-border rounded-lg object-contain"
+                     style="max-width:150px; max-height:150px;" />
+              </div>
+              <div class="flex flex-col items-center gap-2">
+                <div id="predicted-digit" class="text-7xl font-bold text-primary">-</div>
+                <div id="confidence-radial" class="radial-progress text-primary" style="--value:0;" role="progressbar">0%</div>
+                <span id="processing-time-badge" class="badge badge-ghost">-- ms</span>
+              </div>
+            </div>
+
+            <div id="probability-bars" class="space-y-1.5">
+              <!-- rows for digits 0-9 -->
+            </div>
+
+            <div class="flex justify-end">
+              <button id="clear-btn" class="btn btn-outline btn-sm">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Retrain Panel -->
+      <div class="card bg-surface border border-border shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">🔁 Upload Data &amp; Retrain</h2>
+
+          <div class="space-y-3">
+            <div class="flex flex-col sm:flex-row gap-2">
+              <select id="label-select" class="select select-bordered">
+                <option disabled selected value="">Select digit label</option>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+              </select>
+              <input id="files-input" type="file" multiple accept=".png,.jpg,.jpeg"
+                     class="file-input file-input-bordered w-full" />
+              <button id="upload-images-btn" class="btn btn-primary btn-sm whitespace-nowrap">Upload Images</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-2 items-center">
+              <span class="text-sm text-gray-400 whitespace-nowrap">Or upload a ZIP with folders 0-9:</span>
+              <input id="zip-input" type="file" accept=".zip" class="file-input file-input-bordered w-full" />
+              <button id="upload-zip-btn" class="btn btn-secondary btn-sm whitespace-nowrap">Upload ZIP</button>
+            </div>
+
+            <div>
+              <span id="upload-tally-badge" class="badge badge-info">0 images uploaded this session</span>
+            </div>
+
+            <div id="upload-alert-container"></div>
+          </div>
+
+          <div class="divider">Retrain</div>
+
+          <button id="retrain-btn" class="btn btn-primary btn-lg w-full">Retrain Model</button>
+
+          <div id="retrain-result-container" class="mt-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visualizations Panel -->
+    <div class="card bg-surface border border-border shadow-xl lg:col-span-2">
+      <div class="card-body">
+        <h2 class="card-title">📊 Data &amp; Model Visualizations</h2>
+
+        <div id="viz-info-alert" class="alert alert-info hidden">
+          <span>No evaluation data available yet. Retrain the model to generate visualizations.</span>
+        </div>
+
+        <div id="viz-grid" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4 mt-2">
+          <div>
+            <h3 class="font-semibold text-sm mb-2">Training Data: Class Distribution</h3>
+            <canvas id="chart-class-distribution"></canvas>
+            <p class="text-xs text-gray-400 mt-2">
+              The training set is roughly balanced across all ten digits, meaning no digit class is over- or under-represented.
+              This is good for training because the model does not need special handling like class weighting to avoid biasing
+              toward any particular digit.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="font-semibold text-sm mb-2">Model Performance: Per-Class F1 Score</h3>
+            <canvas id="chart-f1"></canvas>
+            <p class="text-xs text-gray-400 mt-2">
+              F1 scores vary slightly by digit. Digits with more visual variation in how people write them (like 9, 7, and 2)
+              tend to score lower because they share strokes with other digits and are easier to confuse. Digits with simple,
+              consistent shapes (like 0 and 1) score highest.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="font-semibold text-sm mb-2">Confusion Matrix</h3>
+            <div id="confusion-matrix-container" class="overflow-x-auto"></div>
+            <p class="text-xs text-gray-400 mt-2">
+              Most predictions land on the diagonal, meaning the model is getting them right. The largest off-diagonal cells
+              reveal which digit pairs the model confuses most often. These are typically digits that share similar strokes
+              or curves, like 2 and 7, or 4 and 9. Exact numbers update after each retraining run.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Retrain History Panel -->
+    <div class="card bg-surface border border-border shadow-xl lg:col-span-2">
+      <div class="card-body">
+        <h2 class="card-title">🕘 Retraining History</h2>
+
+        <div class="max-h-96 overflow-y-auto">
+          <table class="table table-zebra">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Status</th>
+                <th>Baseline Accuracy</th>
+                <th>New Accuracy</th>
+                <th>Change</th>
+                <th>Samples Used</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="retrain-history-body">
+              <!-- rows injected by script.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/frontend/script.js"></script>
+</body>
+</html>

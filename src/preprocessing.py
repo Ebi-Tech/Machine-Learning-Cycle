@@ -12,10 +12,21 @@ IMAGE_SIZE = (28, 28)
 VALID_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp")
 
 
-def _image_to_array(img):
-    """Converts a PIL image to a normalized (28, 28) float32 array."""
+def _image_to_array(img, invert_if_light=False):
+    """Converts a PIL image to a normalized (28, 28) float32 array.
+
+    MNIST digits are white strokes on a black background, but a real
+    scanned or photographed submission is dark ink on white paper. Fed in
+    as-is, that light background reads as a canvas full of bright strokes,
+    so when invert_if_light is set, a light-background image (mean pixel
+    value above 127) is inverted back to MNIST's dark-background format
+    before normalizing.
+    """
     img = img.convert("L").resize(IMAGE_SIZE)
-    return np.array(img).astype("float32") / 255.0
+    arr = np.array(img).astype("float32")
+    if invert_if_light and arr.mean() > 127:
+        arr = 255.0 - arr
+    return arr / 255.0
 
 
 def preprocess_image(image_bytes):
@@ -24,7 +35,7 @@ def preprocess_image(image_bytes):
     Returns an array of shape (1, 28, 28, 1).
     """
     img = Image.open(io.BytesIO(image_bytes))
-    arr = _image_to_array(img)
+    arr = _image_to_array(img, invert_if_light=True)
     return arr.reshape(1, 28, 28, 1)
 
 
@@ -34,7 +45,7 @@ def preprocess_image_from_path(image_path):
     Returns an array of shape (1, 28, 28, 1).
     """
     img = Image.open(image_path)
-    arr = _image_to_array(img)
+    arr = _image_to_array(img, invert_if_light=True)
     return arr.reshape(1, 28, 28, 1)
 
 
@@ -59,7 +70,7 @@ def load_and_preprocess_dataset(data_dir):
                 continue
             img_path = os.path.join(class_path, filename)
             img = Image.open(img_path)
-            images.append(_image_to_array(img))
+            images.append(_image_to_array(img, invert_if_light=True))
             labels.append(label)
 
     if not images:

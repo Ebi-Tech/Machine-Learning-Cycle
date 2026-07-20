@@ -1,0 +1,16 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+.venv-1
+.env
+node_modules
+*.egg-info
+.pytest_cache
+.mypy_cache
+locust/
+scripts/
+README.md
+notebook/
+.DS_Store
