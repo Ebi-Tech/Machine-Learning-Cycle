@@ -33,7 +33,7 @@ EXPOSE 5000
 # It hits /health every 30 seconds. If it fails 3 times in a row, the container is
 # marked unhealthy and can be restarted automatically.
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
+    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",5000)}/health')" || exit 1
 
 # Run with gunicorn for production (not Flask's dev server).
 # Gunicorn is a production WSGI server that handles concurrent requests properly.
