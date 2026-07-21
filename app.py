@@ -2,6 +2,7 @@
 
 Run from the project root with: python app.py
 """
+import fcntl
 import json
 import logging
 import os
@@ -98,20 +99,26 @@ def _append_retrain_log(entry):
     """Appends a retrain attempt (promoted or rejected) to
     models/retrain_log.json, so /retrain-history can return a full audit
     trail of every retraining attempt.
+
+    Under multi-replica deployment, two containers can both be handling a
+    /retrain call and writing to this same volume-mounted file at once. An
+    unlocked read-modify-write would let one write silently clobber the
+    other, so the whole read-append-write cycle holds an exclusive file
+    lock (fcntl.flock), which blocks other writers until it's released.
     """
-    log = []
-    if os.path.exists(RETRAIN_LOG_PATH):
-        try:
-            with open(RETRAIN_LOG_PATH) as f:
-                log = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            log = []
-
-    log.append(entry)
-
     os.makedirs(os.path.dirname(RETRAIN_LOG_PATH), exist_ok=True)
-    with open(RETRAIN_LOG_PATH, "w") as f:
+    with open(RETRAIN_LOG_PATH, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            log = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            log = []
+        log.append(entry)
+        f.seek(0)
+        f.truncate()
         json.dump(log, f, indent=2)
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def _handle_zip_upload(zip_file):
@@ -125,8 +132,25 @@ def _handle_zip_upload(zip_file):
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(tmp_dir)
 
-        for entry in sorted(os.listdir(tmp_dir)):
-            entry_path = os.path.join(tmp_dir, entry)
+        base_dir = tmp_dir
+        top_level_dirs = [
+            d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))
+        ]
+        has_digit_dirs = any(d.isdigit() for d in top_level_dirs)
+
+        if not has_digit_dirs and len(top_level_dirs) == 1:
+            # Common case: someone right-clicked a folder and hit "Compress"
+            # on macOS, which wraps the 0-9 folders in a parent directory.
+            # Look one level deeper before giving up.
+            nested_dir = os.path.join(base_dir, top_level_dirs[0])
+            nested_entries = [
+                d for d in os.listdir(nested_dir) if os.path.isdir(os.path.join(nested_dir, d))
+            ]
+            if any(d.isdigit() for d in nested_entries):
+                base_dir = nested_dir
+
+        for entry in sorted(os.listdir(base_dir)):
+            entry_path = os.path.join(base_dir, entry)
             if not os.path.isdir(entry_path) or not entry.isdigit():
                 continue
 

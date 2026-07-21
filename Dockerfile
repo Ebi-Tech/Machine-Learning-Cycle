@@ -8,9 +8,10 @@ ENV TF_CPP_MIN_LOG_LEVEL=3
 
 WORKDIR /app
 
-# Install system dependencies needed by some Python packages
+# Install system dependencies needed by some Python packages.
+# libgl1-mesa-glx was renamed to libgl1 in current Debian releases.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

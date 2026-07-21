@@ -127,9 +127,18 @@ def retrain_model(model_path, X_new, y_new, epochs=5, batch_size=32, tolerance=0
     }
 
 
+_model_info_cache = {"mtime": None, "params": None}
+
+
 def get_model_info(model_path):
     """Returns file size, last modified timestamp, and parameter count for
     a saved model, for use by the health endpoint.
+
+    The health endpoint calls this on every request, so loading the full
+    Keras model each time would turn a cheap status check into a heavy
+    deserialization. Parameter count only changes when the model file is
+    replaced by a retrain, so it is cached and only recomputed when the
+    file's mtime moves.
     """
     if not os.path.exists(model_path):
         return {
@@ -140,12 +149,17 @@ def get_model_info(model_path):
         }
 
     size_bytes = os.path.getsize(model_path)
-    last_modified = datetime.fromtimestamp(os.path.getmtime(model_path)).isoformat()
-    model = keras.models.load_model(model_path)
+    mtime = os.path.getmtime(model_path)
+    last_modified = datetime.fromtimestamp(mtime).isoformat()
+
+    if _model_info_cache["mtime"] != mtime:
+        model = keras.models.load_model(model_path)
+        _model_info_cache["mtime"] = mtime
+        _model_info_cache["params"] = model.count_params()
 
     return {
         "exists": True,
         "size_bytes": size_bytes,
         "last_modified": last_modified,
-        "parameters": model.count_params(),
+        "parameters": _model_info_cache["params"],
     }
