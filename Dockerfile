@@ -37,6 +37,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 # Run with gunicorn for production (not Flask's dev server).
 # Gunicorn is a production WSGI server that handles concurrent requests properly.
-# 4 workers means 4 parallel request handlers per container.
+# 2 workers to save memory on Render's 512MB free tier.
 # Timeout 120 because retraining requests can take time.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "app:app"]
+# Shell form (no brackets) so ${PORT:-5000} variable substitution works.
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120 app:app
