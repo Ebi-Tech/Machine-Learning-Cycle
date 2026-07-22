@@ -60,9 +60,19 @@ function formatAccuracy(value) {
   return value.toFixed(4);
 }
 
+const ALERT_STYLES = {
+  success: { border: 'border-green-500', text: 'text-green-400' },
+  warning: { border: 'border-amber-500', text: 'text-amber-400' },
+  error: { border: 'border-red-500', text: 'text-red-400' },
+  info: { border: 'border-blue-500', text: 'text-blue-300' },
+};
+
 function showAlert(containerId, type, message) {
   const container = document.getElementById(containerId);
-  container.innerHTML = `<div class="alert alert-${type} mt-2"><span>${message}</span></div>`;
+  const style = ALERT_STYLES[type] || ALERT_STYLES.info;
+  container.innerHTML = `
+    <div class="border-l-4 ${style.border} bg-gray-900/60 rounded-r-md px-3 py-2 text-sm ${style.text} mt-2">${message}</div>
+  `;
 }
 
 // ---------------------------------------------------------------------
@@ -85,7 +95,9 @@ async function fetchHealth() {
     const online = data.status === 'healthy' && data.model_loaded;
 
     statusBadge.textContent = online ? 'Online' : 'Offline';
-    statusBadge.className = online ? 'badge badge-success' : 'badge badge-error';
+    statusBadge.className = online
+      ? 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-green-400 bg-green-400/10 border border-green-400/20 shadow-[0_0_8px_rgba(46,160,67,0.4)]'
+      : 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20';
     statusDot.classList.toggle('hidden', !online);
     liveBadge.classList.toggle('hidden', !online);
 
@@ -98,7 +110,7 @@ async function fetchHealth() {
       : 'Unknown';
   } catch (err) {
     statusBadge.textContent = 'Offline';
-    statusBadge.className = 'badge badge-error';
+    statusBadge.className = 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20';
     statusDot.classList.add('hidden');
     liveBadge.classList.add('hidden');
     uptimeEl.textContent = 'Unknown';
@@ -133,9 +145,7 @@ async function handlePredict(file) {
     document.getElementById('predicted-digit').textContent = data.predicted_digit;
 
     const pct = Math.round(data.confidence * 100);
-    const radial = document.getElementById('confidence-radial');
-    radial.style.setProperty('--value', pct);
-    radial.textContent = `${pct}%`;
+    document.getElementById('confidence-value').textContent = `${pct}% confidence`;
 
     document.getElementById('processing-time-badge').textContent =
       `${data.processing_time_ms.toFixed(1)} ms`;
@@ -144,11 +154,11 @@ async function handlePredict(file) {
       const barPct = Math.round(p * 100);
       const bar = document.getElementById(`prob-bar-${digit}`);
       const text = document.getElementById(`prob-pct-${digit}`);
-      bar.value = barPct;
+      bar.style.width = `${barPct}%`;
       text.textContent = `${barPct}%`;
       bar.className = digit === data.predicted_digit
-        ? 'progress progress-primary w-full'
-        : 'progress w-full';
+        ? 'h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500 ease-out'
+        : 'h-full rounded-full bg-gray-700 transition-all duration-500 ease-out';
     });
   } catch (err) {
     document.getElementById('predicted-digit').textContent = '?';
@@ -159,16 +169,14 @@ function clearPrediction() {
   document.getElementById('predict-result').classList.add('hidden');
   document.getElementById('preview-image').src = '';
   document.getElementById('predicted-digit').textContent = '-';
-  const radial = document.getElementById('confidence-radial');
-  radial.style.setProperty('--value', 0);
-  radial.textContent = '0%';
+  document.getElementById('confidence-value').textContent = '-- confidence';
   document.getElementById('processing-time-badge').textContent = '-- ms';
   for (let digit = 0; digit < 10; digit++) {
     const bar = document.getElementById(`prob-bar-${digit}`);
     const text = document.getElementById(`prob-pct-${digit}`);
-    bar.value = 0;
+    bar.style.width = '0%';
     text.textContent = '0%';
-    bar.className = 'progress w-full';
+    bar.className = 'h-full rounded-full bg-gray-700 transition-all duration-500 ease-out';
   }
   document.getElementById('file-input').value = '';
 }
@@ -180,9 +188,11 @@ function buildProbabilityBars() {
     const row = document.createElement('div');
     row.className = 'flex items-center gap-3';
     row.innerHTML = `
-      <span class="w-4 text-sm text-gray-400">${digit}</span>
-      <progress id="prob-bar-${digit}" class="progress w-full" value="0" max="100"></progress>
-      <span id="prob-pct-${digit}" class="w-12 text-xs text-right text-gray-400">0%</span>
+      <span class="w-8 text-right font-mono text-gray-400 text-sm">${digit}</span>
+      <div class="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div id="prob-bar-${digit}" class="h-full rounded-full bg-gray-700 transition-all duration-500 ease-out" style="width:0%"></div>
+      </div>
+      <span id="prob-pct-${digit}" class="w-12 text-right font-mono text-xs text-gray-500">0%</span>
     `;
     container.appendChild(row);
   }
@@ -291,39 +301,34 @@ async function triggerRetrain() {
 
     if (!res.ok) {
       resultContainer.innerHTML = `
-        <div class="alert alert-error">
-          <span>${data.error || 'Retraining failed.'}</span>
+        <div class="border-l-4 border-red-500 bg-gray-900/60 rounded-r-md px-4 py-3 text-sm text-red-400">
+          ${data.error || 'Retraining failed.'}
         </div>
       `;
       return;
     }
 
     const promoted = data.promoted;
-    const alertClass = promoted ? 'alert-success' : 'alert-warning';
+    const borderClass = promoted ? 'border-green-500' : 'border-amber-500';
+    const titleClass = promoted ? 'text-green-400' : 'text-amber-400';
     const title = promoted ? 'Model Updated' : 'Retraining Rejected';
-    const icon = promoted
-      ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
 
     resultContainer.innerHTML = `
-      <div class="alert ${alertClass} items-start">
-        ${icon}
-        <div>
-          <h3 class="font-bold">${title}</h3>
-          <div class="text-sm space-y-0.5 mt-1">
-          <div>Baseline accuracy: ${formatAccuracy(data.baseline_accuracy)}</div>
-          <div>New accuracy: ${formatAccuracy(data.new_accuracy)}</div>
-          <div>Change: ${(data.accuracy_change * 100).toFixed(2)} pp</div>
-          <div>Samples used: ${data.samples_used}</div>
-          <div class="italic mt-1">${data.reason}</div>
-          </div>
+      <div class="border-l-4 ${borderClass} bg-gray-900/60 rounded-r-md px-4 py-3 text-sm">
+        <div class="font-medium ${titleClass}">${title}</div>
+        <div class="text-gray-400 text-xs space-y-0.5 mt-1.5">
+          <div>Baseline accuracy: <span class="font-mono text-gray-300">${formatAccuracy(data.baseline_accuracy)}</span></div>
+          <div>New accuracy: <span class="font-mono text-gray-300">${formatAccuracy(data.new_accuracy)}</span></div>
+          <div>Change: <span class="font-mono text-gray-300">${(data.accuracy_change * 100).toFixed(2)} pp</span></div>
+          <div>Samples used: <span class="font-mono text-gray-300">${data.samples_used}</span></div>
+          <div class="text-gray-500 pt-1">${data.reason}</div>
         </div>
       </div>
     `;
   } catch (err) {
     resultContainer.innerHTML = `
-      <div class="alert alert-error">
-        <span>Retraining failed: could not reach the server.</span>
+      <div class="border-l-4 border-red-500 bg-gray-900/60 rounded-r-md px-4 py-3 text-sm text-red-400">
+        Retraining failed: could not reach the server.
       </div>
     `;
   } finally {
@@ -419,15 +424,17 @@ async function fetchVisualizations() {
 function buildConfusionMatrix(matrix) {
   const container = document.getElementById('confusion-matrix-container');
   const maxValue = Math.max(...matrix.map((row) => Math.max(...row)), 1);
+  const headerClass = 'text-xs font-semibold text-gray-400 bg-gray-900 p-1.5';
 
-  let html = '<table class="text-xs border-collapse"><thead><tr><th class="p-1"></th>';
+  let html = '<div class="overflow-x-auto rounded-lg border border-gray-800/50">';
+  html += `<table class="border-collapse w-full"><thead><tr><th class="${headerClass}"></th>`;
   for (let p = 0; p < 10; p++) {
-    html += `<th class="p-1 text-center text-gray-400">${p}</th>`;
+    html += `<th class="${headerClass} text-center">${p}</th>`;
   }
   html += '</tr></thead><tbody>';
 
   for (let t = 0; t < 10; t++) {
-    html += `<tr><th class="p-1 text-gray-400">${t}</th>`;
+    html += `<tr><th class="${headerClass}">${t}</th>`;
     for (let p = 0; p < 10; p++) {
       const value = matrix[t][p];
       const opacity = value / maxValue;
@@ -435,12 +442,12 @@ function buildConfusionMatrix(matrix) {
       const color = isDiagonal
         ? `rgba(46, 160, 67, ${opacity})`
         : `rgba(79, 143, 247, ${opacity})`;
-      const textClass = opacity > 0.5 ? 'text-white' : 'text-gray-400';
-      html += `<td class="p-1 text-center text-xs ${textClass}" style="background-color:${color};">${value}</td>`;
+      const textClass = opacity > 0.5 ? 'text-white' : 'text-gray-500';
+      html += `<td class="text-[10px] font-mono text-center p-1.5 ${textClass}" style="background-color:${color};">${value}</td>`;
     }
     html += '</tr>';
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   container.innerHTML = html;
 }
@@ -460,7 +467,7 @@ async function fetchRetrainHistory() {
 
     if (!history || history.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="7" class="text-center italic text-gray-400">No retraining attempts yet.</td></tr>
+        <tr><td colspan="7" class="text-center italic text-gray-600 py-8">No retraining attempts yet.</td></tr>
       `;
       return;
     }
@@ -471,53 +478,54 @@ async function fetchRetrainHistory() {
 
     sorted.forEach((entry) => {
       const tr = document.createElement('tr');
+      tr.className = 'text-sm even:bg-gray-800/30';
 
       const tsTd = document.createElement('td');
+      tsTd.className = 'py-2 pr-4 text-gray-300 whitespace-nowrap';
       tsTd.textContent = new Date(entry.timestamp).toLocaleString();
       tr.appendChild(tsTd);
 
       const statusTd = document.createElement('td');
+      statusTd.className = 'py-2 pr-4';
       const badge = document.createElement('span');
-      badge.className = entry.promoted ? 'badge badge-success' : 'badge badge-warning';
+      badge.className = entry.promoted
+        ? 'text-xs px-2 py-0.5 rounded-full font-medium text-green-400 bg-green-400/10'
+        : 'text-xs px-2 py-0.5 rounded-full font-medium text-amber-400 bg-amber-400/10';
       badge.textContent = entry.promoted ? 'Promoted' : 'Rejected';
       statusTd.appendChild(badge);
       tr.appendChild(statusTd);
 
       const baselineTd = document.createElement('td');
+      baselineTd.className = 'py-2 pr-4 font-mono text-gray-300';
       baselineTd.textContent = formatAccuracy(entry.baseline_accuracy);
       tr.appendChild(baselineTd);
 
       const newAccTd = document.createElement('td');
+      newAccTd.className = 'py-2 pr-4 font-mono text-gray-300';
       newAccTd.textContent = formatAccuracy(entry.new_accuracy);
       tr.appendChild(newAccTd);
 
       const changeTd = document.createElement('td');
       const changePct = entry.accuracy_change * 100;
       changeTd.textContent = `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)} pp`;
-      changeTd.className = changePct >= 0 ? 'text-green-400' : 'text-red-400';
+      changeTd.className = `py-2 pr-4 font-mono ${changePct >= 0 ? 'text-green-400' : 'text-red-400'}`;
       tr.appendChild(changeTd);
 
       const samplesTd = document.createElement('td');
+      samplesTd.className = 'py-2 pr-4 font-mono text-gray-300';
       samplesTd.textContent = entry.samples_used;
       tr.appendChild(samplesTd);
 
       const reasonTd = document.createElement('td');
-      const reason = entry.reason || '';
-      const truncated = reason.length > 60 ? `${reason.slice(0, 60)}...` : reason;
-      const tooltip = document.createElement('div');
-      tooltip.className = 'tooltip';
-      tooltip.setAttribute('data-tip', reason);
-      const span = document.createElement('span');
-      span.textContent = truncated;
-      tooltip.appendChild(span);
-      reasonTd.appendChild(tooltip);
+      reasonTd.className = 'py-2 text-xs text-gray-500 leading-relaxed';
+      reasonTd.textContent = entry.reason || '';
       tr.appendChild(reasonTd);
 
       tbody.appendChild(tr);
     });
   } catch (err) {
     tbody.innerHTML = `
-      <tr><td colspan="7" class="text-center italic text-gray-400">Could not load retraining history.</td></tr>
+      <tr><td colspan="7" class="text-center italic text-gray-600 py-8">Could not load retraining history.</td></tr>
     `;
   }
 }
