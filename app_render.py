@@ -1,0 +1,129 @@
+"""
+Lightweight Flask API for Render cloud deployment.
+Uses ONNX Runtime instead of TensorFlow for inference within 512MB RAM.
+Retraining is disabled on this deployment - use the Docker setup locally.
+"""
+import os
+import json
+import time
+import logging
+from datetime import datetime
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from src.prediction_onnx import load_onnx_model, predict_single_onnx
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+CORS(app)
+
+# Paths
+MODEL_PATH = "models/digit_classifier.onnx"
+EVAL_METRICS_PATH = "models/eval_metrics.json"
+
+# Load ONNX model at startup
+logger.info(f"Loading ONNX model from {MODEL_PATH}")
+onnx_session = load_onnx_model(MODEL_PATH)
+logger.info("ONNX model loaded successfully")
+
+# Track server start time
+SERVER_START_TIME = time.time()
+
+
+@app.route("/")
+def serve_frontend():
+    return send_from_directory("frontend", "index.html")
+
+
+@app.route("/frontend/<path:filename>")
+def serve_static(filename):
+    return send_from_directory("frontend", filename)
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    try:
+        model_mtime = os.path.getmtime(MODEL_PATH)
+        model_size = os.path.getsize(MODEL_PATH)
+        return jsonify({
+            "status": "healthy",
+            "model_loaded": True,
+            "model_path": MODEL_PATH,
+            "model_last_trained": datetime.fromtimestamp(model_mtime).isoformat(),
+            "uptime_seconds": round(time.time() - SERVER_START_TIME, 1),
+            "model_parameters": 242442,  # Known from model architecture
+            "runtime": "onnxruntime",
+            "deployment": "render-free-tier"
+        })
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided. Send an image with key 'file'."}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "Empty filename."}), 400
+
+        start_time = time.time()
+        image_bytes = file.read()
+        result = predict_single_onnx(onnx_session, image_bytes)
+        result["processing_time_ms"] = round((time.time() - start_time) * 1000, 1)
+
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Prediction failed: {e}")
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    return jsonify({
+        "error": "Upload is not available on the Render free-tier deployment due to memory constraints. Use the Docker setup locally for full functionality including upload and retraining.",
+        "docker_command": "docker compose up -d --scale app=1"
+    }), 501
+
+
+@app.route("/retrain", methods=["POST"])
+def retrain():
+    return jsonify({
+        "error": "Retraining is not available on the Render free-tier deployment due to memory constraints. Use the Docker setup locally for full functionality including upload and retraining.",
+        "docker_command": "docker compose up -d --scale app=1"
+    }), 501
+
+
+@app.route("/visualizations", methods=["GET"])
+def visualizations():
+    try:
+        if not os.path.exists(EVAL_METRICS_PATH):
+            return jsonify({"error": "No evaluation data available yet."}), 404
+        with open(EVAL_METRICS_PATH, "r") as f:
+            metrics = json.load(f)
+        return jsonify(metrics)
+    except Exception as e:
+        logger.error(f"Visualizations failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/retrain-history", methods=["GET"])
+def retrain_history():
+    log_path = "models/retrain_log.json"
+    try:
+        if not os.path.exists(log_path):
+            return jsonify([])
+        with open(log_path, "r") as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        return jsonify([])
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
