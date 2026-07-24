@@ -3,13 +3,66 @@
 
 let chartInstances = {};
 let sessionUploadCount = 0;
+let latestRetrainHistory = [];
 
 const DIGIT_COLORS = [
   '#4F8FF7', '#F76E6E', '#4CD37B', '#F7C948', '#B27FF0',
   '#F7924F', '#4FD1F7', '#F74FA3', '#8AC24A', '#7B8CF7',
 ];
 
+// ---------------------------------------------------------------------
+// Tab navigation
+// ---------------------------------------------------------------------
+
+const TAB_TITLES = {
+  dashboard: 'Dashboard',
+  predict: 'Predict',
+  visualizations: 'Visualizations',
+  retrain: 'Retrain',
+  history: 'History',
+};
+
+const NAV_BTN_ACTIVE =
+  'w-full text-left px-4 py-3 rounded-lg transition-all duration-200 border-l-2 flex items-start gap-3 text-white bg-blue-600/15 border-blue-500';
+const NAV_BTN_INACTIVE =
+  'w-full text-left px-4 py-3 rounded-lg transition-all duration-200 border-l-2 flex items-start gap-3 text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border-transparent';
+
+function switchTab(tabName) {
+  if (!TAB_TITLES[tabName]) return;
+
+  document.querySelectorAll('[data-panel]').forEach((panel) => {
+    panel.classList.toggle('hidden', panel.id !== `panel-${tabName}`);
+  });
+
+  document.querySelectorAll('[data-tab]').forEach((btn) => {
+    btn.className = btn.dataset.tab === tabName ? NAV_BTN_ACTIVE : NAV_BTN_INACTIVE;
+  });
+
+  const titleEl = document.getElementById('top-bar-title');
+  if (titleEl) titleEl.textContent = TAB_TITLES[tabName];
+}
+
+function initDeploymentBadge() {
+  const badge = document.getElementById('deployment-badge');
+  if (!badge) return;
+  const isLocal = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+  if (isLocal) {
+    badge.textContent = 'Local';
+    badge.className = 'text-xs text-gray-400 bg-gray-800 rounded-full px-3 py-1';
+  } else {
+    badge.textContent = 'Cloud: Live';
+    badge.className = 'text-xs text-green-400 bg-green-400/10 rounded-full px-3 py-1';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initDeploymentBadge();
+  switchTab('dashboard');
+
+  document.querySelectorAll('[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
   fetchHealth();
   setInterval(fetchHealth, 10000);
 
@@ -17,24 +70,14 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchRetrainHistory();
 
   document.getElementById('file-input').addEventListener('change', (e) => {
-    if (e.target.files && e.target.files[0]) handlePredict(e.target.files[0]);
+    if (e.target.files && e.target.files[0]) runPrediction(e.target.files[0], 'full');
   });
+  wireDropZone('drop-zone', (file) => runPrediction(file, 'full'));
 
-  const dropZone = document.getElementById('drop-zone');
-  dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('border-primary');
+  document.getElementById('quick-file-input').addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) runPrediction(e.target.files[0], 'quick');
   });
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('border-primary');
-  });
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('border-primary');
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handlePredict(e.dataTransfer.files[0]);
-    }
-  });
+  wireDropZone('quick-drop-zone', (file) => runPrediction(file, 'quick'));
 
   document.getElementById('clear-btn').addEventListener('click', clearPrediction);
 
@@ -42,6 +85,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('upload-zip-btn').addEventListener('click', handleZipUpload);
   document.getElementById('retrain-btn').addEventListener('click', triggerRetrain);
 });
+
+function wireDropZone(zoneId, onFile) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    zone.classList.add('border-blue-500');
+  });
+  zone.addEventListener('dragleave', () => {
+    zone.classList.remove('border-blue-500');
+  });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('border-blue-500');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      onFile(e.dataTransfer.files[0]);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -76,16 +137,18 @@ function showAlert(containerId, type, message) {
 }
 
 // ---------------------------------------------------------------------
-// Health / stats bar
+// Health / sidebar status / dashboard stat cards
 // ---------------------------------------------------------------------
 
 async function fetchHealth() {
   const statusBadge = document.getElementById('status-badge');
   const statusDot = document.getElementById('status-dot');
-  const liveBadge = document.getElementById('live-badge');
   const uptimeEl = document.getElementById('stat-uptime');
   const lastTrainedEl = document.getElementById('stat-last-trained');
   const paramsEl = document.getElementById('stat-params');
+  const sidebarDot = document.getElementById('sidebar-status-dot');
+  const sidebarText = document.getElementById('sidebar-status-text');
+  const sidebarUptime = document.getElementById('sidebar-uptime-compact');
 
   try {
     const res = await fetch('/health');
@@ -99,7 +162,6 @@ async function fetchHealth() {
       ? 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-green-400 bg-green-400/10 border border-green-400/20 shadow-[0_0_8px_rgba(46,160,67,0.4)]'
       : 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20';
     statusDot.classList.toggle('hidden', !online);
-    liveBadge.classList.toggle('hidden', !online);
 
     uptimeEl.textContent = formatUptime(data.uptime_seconds);
     lastTrainedEl.textContent = data.model_last_trained
@@ -108,27 +170,57 @@ async function fetchHealth() {
     paramsEl.textContent = data.model_parameters != null
       ? data.model_parameters.toLocaleString()
       : 'Unknown';
+
+    sidebarDot.className = `w-2 h-2 rounded-full shrink-0 ${online ? 'bg-green-500' : 'bg-red-500'}`;
+    sidebarText.textContent = online ? 'Online' : 'Offline';
+    sidebarUptime.textContent = formatUptime(data.uptime_seconds);
   } catch (err) {
     statusBadge.textContent = 'Offline';
     statusBadge.className = 'inline-block text-sm font-semibold px-2.5 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20';
     statusDot.classList.add('hidden');
-    liveBadge.classList.add('hidden');
     uptimeEl.textContent = 'Unknown';
     lastTrainedEl.textContent = 'Unknown';
     paramsEl.textContent = 'Unknown';
+
+    sidebarDot.className = 'w-2 h-2 rounded-full shrink-0 bg-red-500';
+    sidebarText.textContent = 'Offline';
+    sidebarUptime.textContent = '--';
   }
 }
 
 // ---------------------------------------------------------------------
-// Prediction panel
+// Prediction: shared logic for the full Predict tab and the Dashboard's
+// Quick Predict widget. Both call the same /predict endpoint; only the
+// DOM elements they update differ, and the quick version has no
+// probability bars.
 // ---------------------------------------------------------------------
 
-async function handlePredict(file) {
-  const previewImage = document.getElementById('preview-image');
+const PREDICT_TARGETS = {
+  full: {
+    preview: 'preview-image',
+    result: 'predict-result',
+    digit: 'predicted-digit',
+    confidence: 'confidence-value',
+    procTime: 'processing-time-badge',
+    bars: true,
+  },
+  quick: {
+    preview: 'quick-preview-image',
+    result: 'quick-predict-result',
+    digit: 'quick-predicted-digit',
+    confidence: 'quick-confidence-value',
+    procTime: 'quick-processing-time-badge',
+    bars: false,
+  },
+};
+
+async function runPrediction(file, targetKey) {
+  const t = PREDICT_TARGETS[targetKey];
+  const previewImage = document.getElementById(t.preview);
   const objectUrl = URL.createObjectURL(file);
   previewImage.src = objectUrl;
 
-  document.getElementById('predict-result').classList.remove('hidden');
+  document.getElementById(t.result).classList.remove('hidden');
 
   const formData = new FormData();
   formData.append('file', file);
@@ -138,30 +230,30 @@ async function handlePredict(file) {
     const data = await res.json();
 
     if (!res.ok) {
-      document.getElementById('predicted-digit').textContent = '?';
+      document.getElementById(t.digit).textContent = '?';
       return;
     }
 
-    document.getElementById('predicted-digit').textContent = data.predicted_digit;
+    document.getElementById(t.digit).textContent = data.predicted_digit;
 
     const pct = Math.round(data.confidence * 100);
-    document.getElementById('confidence-value').textContent = `${pct}% confidence`;
+    document.getElementById(t.confidence).textContent = `${pct}% confidence`;
+    document.getElementById(t.procTime).textContent = `${data.processing_time_ms.toFixed(1)} ms`;
 
-    document.getElementById('processing-time-badge').textContent =
-      `${data.processing_time_ms.toFixed(1)} ms`;
-
-    data.probabilities.forEach((p, digit) => {
-      const barPct = Math.round(p * 100);
-      const bar = document.getElementById(`prob-bar-${digit}`);
-      const text = document.getElementById(`prob-pct-${digit}`);
-      bar.style.width = `${barPct}%`;
-      text.textContent = `${barPct}%`;
-      bar.className = digit === data.predicted_digit
-        ? 'h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500 ease-out'
-        : 'h-full rounded-full bg-gray-700 transition-all duration-500 ease-out';
-    });
+    if (t.bars) {
+      data.probabilities.forEach((p, digit) => {
+        const barPct = Math.round(p * 100);
+        const bar = document.getElementById(`prob-bar-${digit}`);
+        const text = document.getElementById(`prob-pct-${digit}`);
+        bar.style.width = `${barPct}%`;
+        text.textContent = `${barPct}%`;
+        bar.className = digit === data.predicted_digit
+          ? 'h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500 ease-out'
+          : 'h-full rounded-full bg-gray-700 transition-all duration-500 ease-out';
+      });
+    }
   } catch (err) {
-    document.getElementById('predicted-digit').textContent = '?';
+    document.getElementById(t.digit).textContent = '?';
   }
 }
 
@@ -453,8 +545,38 @@ function buildConfusionMatrix(matrix) {
 }
 
 // ---------------------------------------------------------------------
-// Retrain history panel
+// Retrain history panel + Dashboard "Recent Activity"
 // ---------------------------------------------------------------------
+
+function renderRecentActivity(entries) {
+  const container = document.getElementById('recent-activity-list');
+  if (!container) return;
+
+  if (!entries || entries.length === 0) {
+    container.innerHTML = '<p class="text-sm text-gray-600 italic">No activity yet.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center justify-between text-sm bg-gray-900/50 rounded-lg px-3 py-2 border border-gray-800/50';
+
+    const left = document.createElement('span');
+    left.className = 'text-gray-400 text-xs';
+    left.textContent = new Date(entry.timestamp).toLocaleString();
+
+    const badge = document.createElement('span');
+    badge.className = entry.promoted
+      ? 'text-xs px-2 py-0.5 rounded-full font-medium text-green-400 bg-green-400/10'
+      : 'text-xs px-2 py-0.5 rounded-full font-medium text-amber-400 bg-amber-400/10';
+    badge.textContent = entry.promoted ? 'Promoted' : 'Rejected';
+
+    row.appendChild(left);
+    row.appendChild(badge);
+    container.appendChild(row);
+  });
+}
 
 async function fetchRetrainHistory() {
   const tbody = document.getElementById('retrain-history-body');
@@ -464,17 +586,21 @@ async function fetchRetrainHistory() {
     const res = await fetch('/retrain-history');
     if (!res.ok) throw new Error('retrain history fetch failed');
     const history = await res.json();
+    latestRetrainHistory = history || [];
 
     if (!history || history.length === 0) {
       tbody.innerHTML = `
         <tr><td colspan="7" class="text-center italic text-gray-600 py-8">No retraining attempts yet.</td></tr>
       `;
+      renderRecentActivity([]);
       return;
     }
 
     const sorted = [...history].sort(
       (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
     );
+
+    renderRecentActivity(sorted.slice(0, 3));
 
     sorted.forEach((entry) => {
       const tr = document.createElement('tr');
@@ -527,6 +653,7 @@ async function fetchRetrainHistory() {
     tbody.innerHTML = `
       <tr><td colspan="7" class="text-center italic text-gray-600 py-8">Could not load retraining history.</td></tr>
     `;
+    renderRecentActivity([]);
   }
 }
 
