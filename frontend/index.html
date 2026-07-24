@@ -26,15 +26,45 @@
 
   <style>
     body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+    /* Sidebar collapses to icons-only below the lg breakpoint. The
+       .sidebar-open class (toggled by the hamburger button) expands it
+       back to full width as a fixed overlay. */
+    #sidebar .collapsed-logo { display: none; }
+    @media (max-width: 1023.98px) {
+      #sidebar { width: 4rem; min-width: 4rem; }
+      #sidebar .nav-text { display: none; }
+      #sidebar .collapsed-logo { display: block; }
+      #sidebar:not(.sidebar-open) nav button[data-tab] {
+        justify-content: center;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+      }
+      #sidebar:not(.sidebar-open) .sidebar-status-row { justify-content: center; }
+      #sidebar.sidebar-open {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 16rem;
+        min-width: 16rem;
+        z-index: 50;
+      }
+      #sidebar.sidebar-open .nav-text { display: block; }
+      #sidebar.sidebar-open .collapsed-logo { display: none; }
+    }
   </style>
 </head>
 <body class="h-screen overflow-hidden flex bg-gray-900 text-gray-200 antialiased">
 
   <!-- Sidebar -->
-  <aside class="w-64 min-w-64 h-full bg-gray-950 border-r border-gray-800 flex flex-col">
+  <aside id="sidebar" class="w-64 min-w-64 h-full bg-gray-950 border-r border-gray-800 flex flex-col shrink-0 transition-all duration-200">
     <div class="px-5 py-6 border-b border-gray-800">
-      <div class="text-xl font-bold text-white">ML Cycle</div>
-      <div class="text-xs text-gray-500 mt-0.5">Handwritten Digit Recognition</div>
+      <div class="nav-text">
+        <div class="text-xl font-bold text-white">ML Cycle</div>
+        <div class="text-xs text-gray-500 mt-0.5">Handwritten Digit Recognition</div>
+      </div>
+      <div class="collapsed-logo text-center text-sm font-bold text-white">ML</div>
     </div>
 
     <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
@@ -45,7 +75,7 @@
           <rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/>
           <rect x="9" y="9" width="5.5" height="5.5" rx="1"/>
         </svg>
-        <span>
+        <span class="nav-text">
           <span class="block text-sm font-medium">Dashboard</span>
           <span class="block text-xs text-gray-500 mt-0.5">System health &amp; status</span>
         </span>
@@ -56,7 +86,7 @@
           <circle cx="7" cy="7" r="5"/>
           <line x1="10.8" y1="10.8" x2="14.5" y2="14.5"/>
         </svg>
-        <span>
+        <span class="nav-text">
           <span class="block text-sm font-medium">Predict</span>
           <span class="block text-xs text-gray-500 mt-0.5">Single digit recognition</span>
         </span>
@@ -68,7 +98,7 @@
           <line x1="8" y1="14" x2="8" y2="2"/>
           <line x1="13" y1="14" x2="13" y2="6"/>
         </svg>
-        <span>
+        <span class="nav-text">
           <span class="block text-sm font-medium">Visualizations</span>
           <span class="block text-xs text-gray-500 mt-0.5">Data &amp; model insights</span>
         </span>
@@ -79,7 +109,7 @@
           <path d="M2.5 11.5v1.5a1 1 0 001 1h9a1 1 0 001-1v-1.5"/>
           <path d="M8 10V2M8 2L4.5 5.5M8 2l3.5 3.5"/>
         </svg>
-        <span>
+        <span class="nav-text">
           <span class="block text-sm font-medium">Retrain</span>
           <span class="block text-xs text-gray-500 mt-0.5">Upload data &amp; retrain model</span>
         </span>
@@ -90,7 +120,7 @@
           <circle cx="8" cy="8" r="6"/>
           <path d="M8 4.5V8l3 2"/>
         </svg>
-        <span>
+        <span class="nav-text">
           <span class="block text-sm font-medium">History</span>
           <span class="block text-xs text-gray-500 mt-0.5">Retraining audit log</span>
         </span>
@@ -98,18 +128,30 @@
     </nav>
 
     <div class="mt-auto px-4 py-4 border-t border-gray-800 text-xs text-gray-500">
-      <div class="flex items-center gap-2">
+      <div class="sidebar-status-row flex items-center gap-2">
         <span id="sidebar-status-dot" class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
-        <span id="sidebar-status-text">Offline</span>
+        <span id="sidebar-status-text" class="nav-text">Offline</span>
       </div>
-      <div id="sidebar-uptime-compact" class="mt-1 font-mono">--</div>
+      <div id="sidebar-uptime-compact" class="nav-text mt-1 font-mono">--</div>
     </div>
   </aside>
 
+  <!-- Backdrop shown behind the expanded mobile sidebar overlay -->
+  <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-black/60 z-40 lg:hidden"></div>
+
   <!-- Main content -->
   <div class="flex-1 flex flex-col h-full overflow-hidden">
-    <div class="h-14 border-b border-gray-800 px-8 flex items-center justify-between shrink-0">
-      <span id="top-bar-title" class="text-lg font-semibold text-gray-200">Dashboard</span>
+    <div class="h-14 border-b border-gray-800 px-4 sm:px-8 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-3">
+        <button id="sidebar-toggle" aria-label="Toggle navigation menu" class="lg:hidden -ml-1 p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-all duration-200 focus:ring-2 focus:ring-blue-500/50 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" class="w-5 h-5">
+            <line x1="2" y1="4" x2="14" y2="4"/>
+            <line x1="2" y1="8" x2="14" y2="8"/>
+            <line x1="2" y1="12" x2="14" y2="12"/>
+          </svg>
+        </button>
+        <span id="top-bar-title" class="text-lg font-semibold text-gray-200">Dashboard</span>
+      </div>
       <span id="deployment-badge" class="text-xs text-gray-400 bg-gray-800 rounded-full px-3 py-1">Local</span>
     </div>
 

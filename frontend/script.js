@@ -42,6 +42,29 @@ function switchTab(tabName) {
   if (titleEl) titleEl.textContent = TAB_TITLES[tabName];
 }
 
+// Mobile sidebar: below the lg breakpoint the sidebar collapses to an
+// icons-only rail (handled by CSS). The hamburger button expands it into
+// a full-width overlay with a backdrop; selecting a tab or tapping the
+// backdrop closes it again.
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('sidebar-open');
+  document.getElementById('sidebar-backdrop').classList.remove('hidden');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebar-backdrop').classList.add('hidden');
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar.classList.contains('sidebar-open')) {
+    closeSidebar();
+  } else {
+    openSidebar();
+  }
+}
+
 function initDeploymentBadge() {
   const badge = document.getElementById('deployment-badge');
   if (!badge) return;
@@ -60,8 +83,14 @@ document.addEventListener('DOMContentLoaded', () => {
   switchTab('dashboard');
 
   document.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      switchTab(btn.dataset.tab);
+      closeSidebar();
+    });
   });
+
+  document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
+  document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
 
   fetchHealth();
   setInterval(fetchHealth, 10000);
