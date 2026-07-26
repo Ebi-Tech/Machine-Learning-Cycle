@@ -22,6 +22,7 @@ CORS(app)
 # Paths
 MODEL_PATH = "models/digit_classifier.onnx"
 EVAL_METRICS_PATH = "models/eval_metrics.json"
+MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Load ONNX model at startup
 logger.info(f"Loading ONNX model from {MODEL_PATH}")
@@ -74,10 +75,24 @@ def predict():
 
         start_time = time.time()
         image_bytes = file.read()
-        result = predict_single_onnx(onnx_session, image_bytes)
-        result["processing_time_ms"] = round((time.time() - start_time) * 1000, 1)
+        if len(image_bytes) > MAX_PREDICT_FILE_SIZE:
+            return jsonify({"error": "Image file too large. Maximum size: 10MB."}), 400
 
-        return jsonify(result)
+        result = predict_single_onnx(onnx_session, image_bytes)
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        response = {
+            "predicted_digit": result["predicted_digit"],
+            "confidence": round(result["confidence"], 4),
+            "probabilities": result["probabilities"],
+            "processing_time_ms": round(elapsed_ms, 1),
+        }
+        if not result.get("is_confident", True):
+            response["warning"] = "Low confidence prediction. The uploaded image may not be a handwritten digit."
+
+        return jsonify(response)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500

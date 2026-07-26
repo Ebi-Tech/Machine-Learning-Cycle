@@ -243,6 +243,23 @@ const PREDICT_TARGETS = {
   },
 };
 
+// Shows (or clears) a low-confidence warning banner above the predicted
+// digit inside the given result container. Created and removed dynamically
+// since there's no static placeholder for it in the HTML.
+function showConfidenceWarning(resultContainerId, warningText) {
+  const container = document.getElementById(resultContainerId);
+  const existing = container.querySelector('.confidence-warning-banner');
+  if (existing) existing.remove();
+
+  if (warningText) {
+    const banner = document.createElement('div');
+    banner.className =
+      'confidence-warning-banner text-amber-400 text-sm bg-amber-400/10 rounded-lg px-4 py-2 mb-4';
+    banner.textContent = warningText;
+    container.insertBefore(banner, container.firstChild);
+  }
+}
+
 async function runPrediction(file, targetKey) {
   const t = PREDICT_TARGETS[targetKey];
   const previewImage = document.getElementById(t.preview);
@@ -262,6 +279,8 @@ async function runPrediction(file, targetKey) {
       document.getElementById(t.digit).textContent = '?';
       return;
     }
+
+    showConfidenceWarning(t.result, data.warning);
 
     document.getElementById(t.digit).textContent = data.predicted_digit;
 
@@ -287,6 +306,7 @@ async function runPrediction(file, targetKey) {
 }
 
 function clearPrediction() {
+  showConfidenceWarning('predict-result', null);
   document.getElementById('predict-result').classList.add('hidden');
   document.getElementById('preview-image').src = '';
   document.getElementById('predicted-digit').textContent = '-';

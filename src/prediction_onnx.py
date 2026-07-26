@@ -16,13 +16,20 @@ import onnxruntime as ort
 from PIL import Image
 
 IMAGE_SIZE = (28, 28)
+SAFE_IMAGE_MODES = ("L", "RGB", "RGBA", "1", "P")
 
 
 def _preprocess_image_array(img):
     """Converts a PIL image to a normalized (1, 28, 28, 1) float32 array,
     inverting light backgrounds (mean > 127) to MNIST's dark-background
     format, matching src.preprocessing._image_to_array(invert_if_light=True).
+
+    Unusual PIL modes (CMYK, LAB, I, F, and similar) don't always convert
+    to grayscale cleanly in one step, so anything outside the common modes
+    is normalized to RGB first.
     """
+    if img.mode not in SAFE_IMAGE_MODES:
+        img = img.convert("RGB")
     img = img.convert("L").resize(IMAGE_SIZE)
     arr = np.array(img).astype("float32")
     if arr.mean() > 127:
@@ -32,8 +39,18 @@ def _preprocess_image_array(img):
 
 
 def preprocess_image(image_bytes):
-    """Preprocesses raw uploaded image bytes for inference."""
-    img = Image.open(io.BytesIO(image_bytes))
+    """Preprocesses raw uploaded image bytes for inference.
+
+    Raises ValueError if image_bytes isn't a format PIL can open (a PDF,
+    text file, script, or other non-image upload), so the caller can
+    surface a clean 400 instead of an unhandled server error.
+    """
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except Exception:
+        raise ValueError("Uploaded file is not a valid image. Accepted formats: PNG, JPG, JPEG.")
+
     return _preprocess_image_array(img)
 
 
@@ -49,11 +66,14 @@ def load_onnx_model(model_path):
     return session
 
 
-def predict_single_onnx(session, image_bytes):
+def predict_single_onnx(session, image_bytes, confidence_threshold=0.7):
     """
     Run prediction using ONNX runtime.
     Takes an ONNX session and raw image bytes.
-    Returns dict with predicted_digit, confidence, and probabilities.
+    Returns dict with predicted_digit, confidence, probabilities, and
+    is_confident (True if confidence meets confidence_threshold, so the
+    caller can decide whether to warn that the input may not be a valid
+    handwritten digit).
     """
     processed = preprocess_image(image_bytes)
     processed = processed.astype(np.float32)
@@ -76,6 +96,7 @@ def predict_single_onnx(session, image_bytes):
         "predicted_digit": predicted_digit,
         "confidence": confidence,
         "probabilities": [float(p) for p in probabilities],
+        "is_confident": confidence >= confidence_threshold,
     }
 
 

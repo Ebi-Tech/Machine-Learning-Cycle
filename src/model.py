@@ -79,6 +79,17 @@ def retrain_model(model_path, X_new, y_new, epochs=5, batch_size=32, tolerance=0
     Returns a dict with promoted, baseline_accuracy, new_accuracy,
     accuracy_change, samples_used, epochs_run, reason.
     """
+    if len(X_new) == 0 or len(y_new) == 0:
+        return {
+            "promoted": False,
+            "baseline_accuracy": 0.0,
+            "new_accuracy": 0.0,
+            "accuracy_change": 0.0,
+            "samples_used": 0,
+            "epochs_run": 0,
+            "reason": "No valid training images found in the upload directory.",
+        }
+
     model = keras.models.load_model(model_path)
 
     X_test_raw = np.load(TEST_X_PATH)

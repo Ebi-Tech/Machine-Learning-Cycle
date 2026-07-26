@@ -29,7 +29,8 @@ EVAL_METRICS_PATH = "models/eval_metrics.json"
 RETRAIN_LOG_PATH = "models/retrain_log.json"
 TRAIN_DATA_PATH = "data/train"
 TEST_DATA_PATH = "data/test"
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp"}
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff"}
+MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -213,16 +214,25 @@ def predict():
             return jsonify({"error": f"Invalid file format. Allowed: {sorted(ALLOWED_EXTENSIONS)}"}), 400
 
         image_bytes = file.read()
+        if len(image_bytes) > MAX_PREDICT_FILE_SIZE:
+            return jsonify({"error": "Image file too large. Maximum size: 10MB."}), 400
+
         start = time.time()
         result = predict_single(model, image_bytes)
         elapsed_ms = (time.time() - start) * 1000
 
-        return jsonify({
+        response = {
             "predicted_digit": result["predicted_digit"],
             "confidence": round(result["confidence"], 4),
             "probabilities": result["probabilities"],
             "processing_time_ms": round(elapsed_ms, 2),
-        }), 200
+        }
+        if not result.get("is_confident", True):
+            response["warning"] = "Low confidence prediction. The uploaded image may not be a handwritten digit."
+
+        return jsonify(response), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"/predict failed: {e}")
         return jsonify({"error": str(e)}), 500
@@ -279,7 +289,7 @@ def retrain():
             and os.listdir(os.path.join(RETRAIN_DIR, d))
         ]
         if not class_dirs:
-            return jsonify({"error": f"{RETRAIN_DIR}/ is empty. Upload labeled images before retraining."}), 400
+            return jsonify({"error": "No training data available. Upload images first using the /upload endpoint."}), 400
 
         X_new, y_new = load_and_preprocess_dataset(RETRAIN_DIR)
 
