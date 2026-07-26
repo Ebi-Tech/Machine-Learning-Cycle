@@ -228,7 +228,10 @@ def predict():
             "processing_time_ms": round(elapsed_ms, 2),
         }
         if not result.get("is_confident", True):
-            response["warning"] = "Low confidence prediction. The uploaded image may not be a handwritten digit."
+            response["warning"] = result.get(
+                "warning",
+                "Low confidence prediction. The uploaded image may not be a handwritten digit.",
+            )
 
         return jsonify(response), 200
     except ValueError as e:

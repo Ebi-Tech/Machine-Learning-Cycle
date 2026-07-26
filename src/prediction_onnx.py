@@ -74,9 +74,25 @@ def predict_single_onnx(session, image_bytes, confidence_threshold=0.7):
     is_confident (True if confidence meets confidence_threshold, so the
     caller can decide whether to warn that the input may not be a valid
     handwritten digit).
+
+    A near-blank image (fewer than 10 of 784 pixels above 0.1 after
+    normalization) is rejected before it ever reaches the model: a softmax
+    head doesn't have a real "nothing here" output, so an empty canvas
+    still gets classified as some digit with deceptively high confidence
+    instead of naturally producing a low one.
     """
     processed = preprocess_image(image_bytes)
     processed = processed.astype(np.float32)
+
+    active_pixels = int((processed > 0.1).sum())
+    if active_pixels < 10:
+        return {
+            "predicted_digit": None,
+            "confidence": 0.0,
+            "probabilities": [0.0] * 10,
+            "is_confident": False,
+            "warning": "The uploaded image appears to be blank or does not contain a visible digit.",
+        }
 
     input_name = session.get_inputs()[0].name
     output = session.run(None, {input_name: processed})[0]

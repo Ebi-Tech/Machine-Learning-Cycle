@@ -281,14 +281,27 @@ async function runPrediction(file, targetKey) {
     }
 
     showConfidenceWarning(t.result, data.warning);
+    document.getElementById(t.procTime).textContent = `${data.processing_time_ms.toFixed(1)} ms`;
+
+    if (data.predicted_digit === null) {
+      // Blank/no-digit image: nothing meaningful to show as a digit or a
+      // confidence percentage, and the probability bars would just be
+      // ten empty rows, so hide them and let the warning banner speak.
+      document.getElementById(t.digit).textContent = '-';
+      document.getElementById(t.confidence).textContent = '';
+      if (t.bars) {
+        document.getElementById('probability-bars').classList.add('hidden');
+      }
+      return;
+    }
 
     document.getElementById(t.digit).textContent = data.predicted_digit;
 
     const pct = Math.round(data.confidence * 100);
     document.getElementById(t.confidence).textContent = `${pct}% confidence`;
-    document.getElementById(t.procTime).textContent = `${data.processing_time_ms.toFixed(1)} ms`;
 
     if (t.bars) {
+      document.getElementById('probability-bars').classList.remove('hidden');
       data.probabilities.forEach((p, digit) => {
         const barPct = Math.round(p * 100);
         const bar = document.getElementById(`prob-bar-${digit}`);
@@ -312,6 +325,7 @@ function clearPrediction() {
   document.getElementById('predicted-digit').textContent = '-';
   document.getElementById('confidence-value').textContent = '-- confidence';
   document.getElementById('processing-time-badge').textContent = '-- ms';
+  document.getElementById('probability-bars').classList.remove('hidden');
   for (let digit = 0; digit < 10; digit++) {
     const bar = document.getElementById(`prob-bar-${digit}`);
     const text = document.getElementById(`prob-pct-${digit}`);
