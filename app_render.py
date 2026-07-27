@@ -5,6 +5,7 @@ Retraining is disabled on this deployment - use the Docker setup locally.
 """
 import os
 import json
+import sqlite3
 import time
 import logging
 from datetime import datetime
@@ -22,7 +23,29 @@ CORS(app)
 # Paths
 MODEL_PATH = "models/digit_classifier.onnx"
 EVAL_METRICS_PATH = "models/eval_metrics.json"
+DB_PATH = "models/uploads.db"
 MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS training_uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            label INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER,
+            upload_timestamp TEXT NOT NULL,
+            used_in_retrain INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+init_db()
 
 # Load ONNX model at startup
 logger.info(f"Loading ONNX model from {MODEL_PATH}")
@@ -115,6 +138,32 @@ def retrain():
         "error": "Retraining is not available on the Render free-tier deployment due to memory constraints. Use the Docker setup locally for full functionality including upload and retraining.",
         "docker_command": "docker compose up -d --scale app=1"
     }), 501
+
+
+@app.route("/uploads", methods=["GET"])
+def get_uploads():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM training_uploads ORDER BY upload_timestamp DESC LIMIT 100")
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        summary = {}
+        for row in rows:
+            label = str(row["label"])
+            if label not in summary:
+                summary[label] = 0
+            summary[label] += 1
+
+        return jsonify({
+            "total_uploads": len(rows),
+            "per_class": summary,
+            "recent": rows[:20],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/visualizations", methods=["GET"])

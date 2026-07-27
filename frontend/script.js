@@ -97,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchVisualizations();
   fetchRetrainHistory();
+  fetchUploadSummary();
 
   document.getElementById('file-input').addEventListener('change', (e) => {
     if (e.target.files && e.target.files[0]) runPrediction(e.target.files[0], 'full');
@@ -393,6 +394,7 @@ async function handleUpload() {
 
     filesInput.value = '';
     labelSelect.selectedIndex = 0;
+    fetchUploadSummary();
   } catch (err) {
     showAlert('upload-alert-container', 'error', 'Upload failed: could not reach the server.');
   }
@@ -432,8 +434,46 @@ async function handleZipUpload() {
       `${sessionUploadCount} images uploaded this session`;
 
     zipInput.value = '';
+    fetchUploadSummary();
   } catch (err) {
     showAlert('upload-alert-container', 'error', 'ZIP upload failed: could not reach the server.');
+  }
+}
+
+// ---------------------------------------------------------------------
+// Retrain panel: upload database summary
+// ---------------------------------------------------------------------
+
+async function fetchUploadSummary() {
+  const container = document.getElementById('upload-db-summary');
+  if (!container) return;
+
+  const titleHtml = '<div class="text-xs uppercase tracking-wider text-gray-500 mb-2">Training Data Store</div>';
+
+  try {
+    const res = await fetch('/uploads');
+    if (!res.ok) throw new Error('uploads fetch failed');
+    const data = await res.json();
+
+    const perClassEntries = Object.entries(data.per_class || {})
+      .sort((a, b) => Number(a[0]) - Number(b[0]));
+
+    const rows = perClassEntries.length
+      ? perClassEntries.map(([label, count]) => `
+          <div class="flex justify-between">
+            <span class="text-gray-400">Label ${label}</span>
+            <span class="font-mono text-gray-300">${count} image${count === 1 ? '' : 's'}</span>
+          </div>
+        `).join('')
+      : '<p class="text-gray-600 italic">No uploads recorded yet.</p>';
+
+    container.innerHTML = `
+      ${titleHtml}
+      <div class="text-gray-300 mb-2">${data.total_uploads} image${data.total_uploads === 1 ? '' : 's'} uploaded (all time)</div>
+      <div class="space-y-1">${rows}</div>
+    `;
+  } catch (err) {
+    container.innerHTML = `${titleHtml}<p class="text-gray-600 italic">Could not load upload history.</p>`;
   }
 }
 
@@ -492,6 +532,7 @@ async function triggerRetrain() {
     fetchHealth();
     fetchVisualizations();
     fetchRetrainHistory();
+    fetchUploadSummary();
   }
 }
 

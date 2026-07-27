@@ -38,8 +38,12 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 # Run with gunicorn for production (not Flask's dev server).
 # Gunicorn is a production WSGI server that handles concurrent requests properly.
 # 1 worker to save memory on Render's 512MB free tier.
-# --preload loads TensorFlow and the model once in the master process before
-# forking, instead of every worker re-importing and re-loading it independently.
+# No --preload: with a single worker there's no other process to share the
+# preloaded model with, and preloading TensorFlow (which starts its own
+# thread pool) before gunicorn forks the worker deadlocks the worker — a
+# lock TF's threads held at fork time never gets released in the child,
+# since those threads don't exist post-fork. Each worker loads the model
+# itself instead.
 # Timeout 120 because retraining requests can take time.
 # Shell form (no brackets) so ${PORT:-5000} variable substitution works.
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 --preload app:app
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 app:app

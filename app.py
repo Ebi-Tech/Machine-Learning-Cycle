@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import time
 import zipfile
 from datetime import datetime
@@ -27,6 +28,7 @@ MODEL_PATH = "models/digit_classifier.h5"
 RETRAIN_DIR = "data/retrain"
 EVAL_METRICS_PATH = "models/eval_metrics.json"
 RETRAIN_LOG_PATH = "models/retrain_log.json"
+DB_PATH = "models/uploads.db"
 TRAIN_DATA_PATH = "data/train"
 TEST_DATA_PATH = "data/test"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff"}
@@ -48,6 +50,42 @@ logger.info(f"Loaded model from {MODEL_PATH}")
 
 app = Flask(__name__)
 CORS(app)
+
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS training_uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            label INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER,
+            upload_timestamp TEXT NOT NULL,
+            used_in_retrain INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+def _record_upload(filename, label, file_path, file_size):
+    """Inserts one row per image that lands on disk via /upload, so every
+    upload is tracked in the database in addition to the filesystem the
+    retraining pipeline actually reads from.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO training_uploads (filename, label, file_path, file_size, upload_timestamp) VALUES (?, ?, ?, ?, ?)",
+        (filename, label, file_path, file_size, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
 
 
 @app.route("/")
@@ -166,6 +204,7 @@ def _handle_zip_upload(zip_file):
                 dst_path = os.path.join(label_dir, secure_filename(filename))
                 shutil.move(src_path, dst_path)
                 saved += 1
+                _record_upload(secure_filename(filename), int(entry), dst_path, os.path.getsize(dst_path))
 
             if saved:
                 per_class_counts[entry] = per_class_counts.get(entry, 0) + saved
@@ -266,8 +305,10 @@ def upload():
         for f in files:
             if f.filename == "" or not allowed_file(f.filename):
                 continue
-            f.save(os.path.join(label_dir, secure_filename(f.filename)))
+            dest_path = os.path.join(label_dir, secure_filename(f.filename))
+            f.save(dest_path)
             saved += 1
+            _record_upload(secure_filename(f.filename), int(label), dest_path, os.path.getsize(dest_path))
 
         if saved == 0:
             return jsonify({"error": "No valid image files were uploaded."}), 400
@@ -322,6 +363,12 @@ def retrain():
         else:
             logger.info(f"Retrain rejected, original model kept: {result['reason']}")
 
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE training_uploads SET used_in_retrain = 1 WHERE used_in_retrain = 0")
+        conn.commit()
+        conn.close()
+
         _append_retrain_log({**response, "timestamp": datetime.now().isoformat()})
 
         return jsonify(response), 200
@@ -329,6 +376,32 @@ def retrain():
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"/retrain failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/uploads", methods=["GET"])
+def get_uploads():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM training_uploads ORDER BY upload_timestamp DESC LIMIT 100")
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        summary = {}
+        for row in rows:
+            label = str(row["label"])
+            if label not in summary:
+                summary[label] = 0
+            summary[label] += 1
+
+        return jsonify({
+            "total_uploads": len(rows),
+            "per_class": summary,
+            "recent": rows[:20],
+        })
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 

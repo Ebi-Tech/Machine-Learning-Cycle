@@ -25,6 +25,7 @@ models/*_savedmodel/
 models/training_history.json
 models/eval_metrics.json
 models/retrain_log.json
+models/uploads.db
 !models/.gitkeep
 
 # User-uploaded retraining data (collected at runtime, not tracked)
