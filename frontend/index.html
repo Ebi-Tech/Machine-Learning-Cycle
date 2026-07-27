@@ -268,9 +268,8 @@
               <h3 class="text-sm font-medium text-gray-400 mb-3">Training Data: Class Distribution</h3>
               <canvas id="chart-class-distribution"></canvas>
               <p class="text-xs leading-relaxed text-gray-500 mt-3 border-t border-gray-800/50 pt-3">
-                The training set is roughly balanced across all ten digits, meaning no digit class is over- or under-represented.
-                This is good for training because the model does not need special handling like class weighting to avoid biasing
-                toward any particular digit.
+                The training set is roughly balanced. Digit 1 has the most samples at around 6,700 and digit 5 has the fewest
+                at around 5,400. The gap is small enough that the model does not need class weighting to avoid bias.
               </p>
             </div>
 
@@ -278,9 +277,8 @@
               <h3 class="text-sm font-medium text-gray-400 mb-3">Model Performance: Per-Class F1 Score</h3>
               <canvas id="chart-f1"></canvas>
               <p class="text-xs leading-relaxed text-gray-500 mt-3 border-t border-gray-800/50 pt-3">
-                F1 scores vary slightly by digit. Digits with more visual variation in how people write them (like 9, 7, and 2)
-                tend to score lower because they share strokes with other digits and are easier to confuse. Digits with simple,
-                consistent shapes (like 0 and 1) score highest.
+                Most digits score above 0.99. Digits 7, 8, and 5 score slightly lower because they share stroke patterns with
+                other digits. A handwritten 2 or 9 is often misread as a 7, and a 5 can look like a 3.
               </p>
             </div>
           </div>
@@ -289,9 +287,9 @@
             <h3 class="text-sm font-medium text-gray-400 mb-3">Confusion Matrix</h3>
             <div id="confusion-matrix-container" class="overflow-x-auto"></div>
             <p class="text-xs leading-relaxed text-gray-500 mt-3 border-t border-gray-800/50 pt-3">
-              Most predictions land on the diagonal, meaning the model is getting them right. The largest off-diagonal cells
-              reveal which digit pairs the model confuses most often. These are typically digits that share similar strokes
-              or curves, like 2 and 7, or 4 and 9. Exact numbers update after each retraining run.
+              The diagonal is strong, meaning the model gets most predictions right. The largest errors are 8 instances of
+              digit 2 predicted as 7, and 7 instances of digit 5 predicted as 3. These pairs share similar curves and are the
+              most common source of confusion. Exact numbers update after retraining.
             </p>
           </div>
         </div>
