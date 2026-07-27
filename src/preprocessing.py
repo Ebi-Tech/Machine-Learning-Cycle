@@ -5,7 +5,7 @@ import io
 import os
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from tensorflow.keras.utils import to_categorical
 
 IMAGE_SIZE = (28, 28)
@@ -13,7 +13,41 @@ VALID_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff")
 SAFE_IMAGE_MODES = ("L", "RGB", "RGBA", "1", "P")
 
 
-def _image_to_array(img, invert_if_light=False):
+def _otsu_threshold_array(arr):
+    """Blurs a 0-255 grayscale array to smooth out paper texture and camera
+    noise, then applies Otsu's method to binarize it: sweeps every possible
+    split point and picks the one that best separates dark background from
+    bright strokes (minimizes the spread within each side), producing a
+    clean black-and-white image instead of a noisy grayscale scan.
+    """
+    img = Image.fromarray(arr.astype("uint8"))
+    img = img.filter(ImageFilter.GaussianBlur(radius=1))
+    img_array = np.array(img)
+
+    hist, _ = np.histogram(img_array.flatten(), bins=256, range=(0, 256))
+    total = img_array.size
+    sum_all = np.sum(np.arange(256) * hist)
+    sum_bg, weight_bg = 0.0, 0
+    max_variance, threshold = 0, 0
+    for t in range(256):
+        weight_bg += hist[t]
+        if weight_bg == 0:
+            continue
+        weight_fg = total - weight_bg
+        if weight_fg == 0:
+            break
+        sum_bg += t * hist[t]
+        mean_bg = sum_bg / weight_bg
+        mean_fg = (sum_all - sum_bg) / weight_fg
+        variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+        if variance > max_variance:
+            max_variance = variance
+            threshold = t
+
+    return ((img_array > threshold) * 255).astype("float32")
+
+
+def _image_to_array(img, invert_if_light=False, apply_thresholding=False):
     """Converts a PIL image to a normalized (28, 28) float32 array.
 
     MNIST digits are white strokes on a black background, but a real
@@ -26,13 +60,24 @@ def _image_to_array(img, invert_if_light=False):
     Unusual PIL modes (CMYK, LAB, I, F, and similar) don't always convert
     to grayscale cleanly in one step, so anything outside the common modes
     is normalized to RGB first.
+
+    apply_thresholding runs Gaussian blur + Otsu binarization before
+    normalizing, for real-world photos/scans that carry paper texture and
+    lighting gradients MNIST never has. It's off by default: retraining
+    data walked by load_and_preprocess_dataset goes through this same
+    function, and reshaping already-clean images through a background
+    separation step built for noisy photos would be pointless work at
+    best and lossy at worst.
     """
     if img.mode not in SAFE_IMAGE_MODES:
         img = img.convert("RGB")
-    img = img.convert("L").resize(IMAGE_SIZE)
+    img = img.convert("L")
+    img = img.resize(IMAGE_SIZE)
     arr = np.array(img).astype("float32")
     if invert_if_light and arr.mean() > 127:
         arr = 255.0 - arr
+    if apply_thresholding:
+        arr = _otsu_threshold_array(arr)
     return arr / 255.0
 
 
@@ -51,7 +96,7 @@ def preprocess_image(image_bytes):
     except Exception:
         raise ValueError("Uploaded file is not a valid image. Accepted formats: PNG, JPG, JPEG.")
 
-    arr = _image_to_array(img, invert_if_light=True)
+    arr = _image_to_array(img, invert_if_light=True, apply_thresholding=True)
     return arr.reshape(1, 28, 28, 1)
 
 
@@ -61,7 +106,7 @@ def preprocess_image_from_path(image_path):
     Returns an array of shape (1, 28, 28, 1).
     """
     img = Image.open(image_path)
-    arr = _image_to_array(img, invert_if_light=True)
+    arr = _image_to_array(img, invert_if_light=True, apply_thresholding=True)
     return arr.reshape(1, 28, 28, 1)
 
 

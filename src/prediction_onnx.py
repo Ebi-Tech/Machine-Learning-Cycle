@@ -13,10 +13,49 @@ import io
 
 import numpy as np
 import onnxruntime as ort
-from PIL import Image
+from PIL import Image, ImageFilter
 
 IMAGE_SIZE = (28, 28)
 SAFE_IMAGE_MODES = ("L", "RGB", "RGBA", "1", "P")
+
+
+def _otsu_threshold_array(arr):
+    """Blurs a 0-255 grayscale array to smooth out paper texture and camera
+    noise, then applies Otsu's method to binarize it: sweeps every possible
+    split point and picks the one that best separates dark background from
+    bright strokes (minimizes the spread within each side), producing a
+    clean black-and-white image instead of a noisy grayscale scan.
+
+    Duplicated from src/preprocessing.py rather than imported, for the same
+    reason the rest of this module's preprocessing is self-contained: that
+    module imports tensorflow.keras.utils at the top level, which would
+    crash this deployment (see the module docstring above).
+    """
+    img = Image.fromarray(arr.astype("uint8"))
+    img = img.filter(ImageFilter.GaussianBlur(radius=1))
+    img_array = np.array(img)
+
+    hist, _ = np.histogram(img_array.flatten(), bins=256, range=(0, 256))
+    total = img_array.size
+    sum_all = np.sum(np.arange(256) * hist)
+    sum_bg, weight_bg = 0.0, 0
+    max_variance, threshold = 0, 0
+    for t in range(256):
+        weight_bg += hist[t]
+        if weight_bg == 0:
+            continue
+        weight_fg = total - weight_bg
+        if weight_fg == 0:
+            break
+        sum_bg += t * hist[t]
+        mean_bg = sum_bg / weight_bg
+        mean_fg = (sum_all - sum_bg) / weight_fg
+        variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+        if variance > max_variance:
+            max_variance = variance
+            threshold = t
+
+    return ((img_array > threshold) * 255).astype("float32")
 
 
 def _preprocess_image_array(img):
@@ -30,10 +69,12 @@ def _preprocess_image_array(img):
     """
     if img.mode not in SAFE_IMAGE_MODES:
         img = img.convert("RGB")
-    img = img.convert("L").resize(IMAGE_SIZE)
+    img = img.convert("L")
+    img = img.resize(IMAGE_SIZE)
     arr = np.array(img).astype("float32")
     if arr.mean() > 127:
         arr = 255.0 - arr
+    arr = _otsu_threshold_array(arr)
     arr = arr / 255.0
     return arr.reshape(1, 28, 28, 1)
 
