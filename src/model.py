@@ -15,10 +15,7 @@ TEST_Y_PATH = "data/test/y_test.npy"
 
 
 def build_enhanced_cnn():
-    """Builds and compiles the Experiment 2 architecture (the notebook's
-    selected best model): Conv-BatchNorm-Pool-Dropout x2, then a deeper conv
-    block, dropout, and a dense head.
-    """
+    """Builds the CNN architecture chosen in the notebook (Experiment 2)."""
     model = models.Sequential([
         layers.Input(shape=(28, 28, 1)),
         layers.Conv2D(32, (3, 3), activation="relu"),
@@ -44,10 +41,6 @@ def build_enhanced_cnn():
 
 
 def train_model(model, X_train, y_train, X_val, y_val, epochs=10, batch_size=64):
-    """Trains model with early stopping and LR reduction on plateau.
-
-    Returns the training history dict (history.history).
-    """
     training_callbacks = [
         callbacks.EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True),
         callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=2, min_lr=1e-6),
@@ -64,20 +57,16 @@ def train_model(model, X_train, y_train, X_val, y_val, epochs=10, batch_size=64)
 
 
 def retrain_model(model_path, X_new, y_new, epochs=5, batch_size=32, tolerance=0.005):
-    """Fine-tunes a saved model on newly collected data, gated by a safety
-    check against the held-out MNIST test set.
+    """Retrains a saved model on new data, but only keeps the result if
+    it's not much worse than the original.
 
-    A retrain on bad or too-small a batch of new data can quietly wreck a
-    deployed model, so the retrained model is only promoted (saved over
-    model_path) if its accuracy on data/test/ stays within `tolerance` of
-    the pre-retrain baseline. If it regresses beyond that, the original
-    model file is left untouched and the fine-tuned weights are discarded.
+    Bad or too little new data can quietly wreck a working model, so the
+    retrained version only overwrites model_path if its test accuracy
+    stays within `tolerance` of the original. Otherwise the original file
+    is left alone and the new weights are thrown away.
 
-    A saved model's optimizer is not fit-ready after reload, so it is
-    recompiled with a fresh Adam optimizer before fine-tuning.
-
-    Returns a dict with promoted, baseline_accuracy, new_accuracy,
-    accuracy_change, samples_used, epochs_run, reason.
+    A saved model isn't ready to keep training right after loading, so it
+    gets recompiled with a fresh optimizer first.
     """
     if len(X_new) == 0 or len(y_new) == 0:
         return {
@@ -142,14 +131,9 @@ _model_info_cache = {"mtime": None, "params": None}
 
 
 def get_model_info(model_path):
-    """Returns file size, last modified timestamp, and parameter count for
-    a saved model, for use by the health endpoint.
-
-    The health endpoint calls this on every request, so loading the full
-    Keras model each time would turn a cheap status check into a heavy
-    deserialization. Parameter count only changes when the model file is
-    replaced by a retrain, so it is cached and only recomputed when the
-    file's mtime moves.
+    """Used by the health endpoint, which calls this on every request.
+    Loading the full model every time would be slow, so the parameter
+    count is cached and only recomputed when the model file changes.
     """
     if not os.path.exists(model_path):
         return {

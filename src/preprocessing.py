@@ -14,11 +14,9 @@ SAFE_IMAGE_MODES = ("L", "RGB", "RGBA", "1", "P")
 
 
 def _otsu_threshold_array(arr):
-    """Blurs a 0-255 grayscale array to smooth out paper texture and camera
-    noise, then applies Otsu's method to binarize it: sweeps every possible
-    split point and picks the one that best separates dark background from
-    bright strokes (minimizes the spread within each side), producing a
-    clean black-and-white image instead of a noisy grayscale scan.
+    """Blurs the image to smooth out paper texture and camera noise, then
+    finds the best black/white cutoff automatically (Otsu's method)
+    instead of using one fixed threshold for every image.
     """
     img = Image.fromarray(arr.astype("uint8"))
     img = img.filter(ImageFilter.GaussianBlur(radius=1))
@@ -50,24 +48,17 @@ def _otsu_threshold_array(arr):
 def _image_to_array(img, invert_if_light=False, apply_thresholding=False):
     """Converts a PIL image to a normalized (28, 28) float32 array.
 
-    MNIST digits are white strokes on a black background, but a real
-    scanned or photographed submission is dark ink on white paper. Fed in
-    as-is, that light background reads as a canvas full of bright strokes,
-    so when invert_if_light is set, a light-background image (mean pixel
-    value above 127) is inverted back to MNIST's dark-background format
-    before normalizing.
+    MNIST digits are white strokes on black, but a real photo is usually
+    dark ink on white paper. invert_if_light flips a light-background
+    image back to MNIST's format.
 
-    Unusual PIL modes (CMYK, LAB, I, F, and similar) don't always convert
-    to grayscale cleanly in one step, so anything outside the common modes
-    is normalized to RGB first.
+    Unusual PIL modes (CMYK, LAB, etc.) don't always convert to grayscale
+    cleanly, so anything outside the common modes goes through RGB first.
 
-    apply_thresholding runs Gaussian blur + Otsu binarization before
-    normalizing, for real-world photos/scans that carry paper texture and
-    lighting gradients MNIST never has. It's off by default: retraining
-    data walked by load_and_preprocess_dataset goes through this same
-    function, and reshaping already-clean images through a background
-    separation step built for noisy photos would be pointless work at
-    best and lossy at worst.
+    apply_thresholding blurs and cleans up the image for real photos with
+    paper texture and lighting glare. It's off by default because
+    load_and_preprocess_dataset uses this same function for retraining
+    data, which is already clean and doesn't need it.
     """
     if img.mode not in SAFE_IMAGE_MODES:
         img = img.convert("RGB")
@@ -82,13 +73,9 @@ def _image_to_array(img, invert_if_light=False, apply_thresholding=False):
 
 
 def preprocess_image(image_bytes):
-    """Preprocesses raw uploaded image bytes for model.predict().
-
-    Returns an array of shape (1, 28, 28, 1).
-
-    Raises ValueError if image_bytes isn't a format PIL can open (a PDF,
-    text file, script, or other non-image upload), so the caller can
-    surface a clean 400 instead of an unhandled server error.
+    """Raises ValueError if image_bytes isn't a format PIL can open (a PDF,
+    text file, or other non-image upload), so the caller can return a
+    clean 400 instead of crashing.
     """
     try:
         img = Image.open(io.BytesIO(image_bytes))
@@ -101,10 +88,6 @@ def preprocess_image(image_bytes):
 
 
 def preprocess_image_from_path(image_path):
-    """Preprocesses an image file on disk for model.predict().
-
-    Returns an array of shape (1, 28, 28, 1).
-    """
     img = Image.open(image_path)
     arr = _image_to_array(img, invert_if_light=True, apply_thresholding=True)
     return arr.reshape(1, 28, 28, 1)
@@ -113,10 +96,9 @@ def preprocess_image_from_path(image_path):
 def load_and_preprocess_dataset(data_dir):
     """Loads a labeled image dataset from data_dir/{0..9}/*.png style folders.
 
-    Returns (X, y): X is shape (n, 28, 28, 1) normalized, y is one-hot shape
-    (n, 10). If no valid images are found, returns two empty arrays instead
-    of raising, so callers like retrain_model can handle "nothing to train
-    on" as a normal, expected outcome rather than an exception.
+    Returns two empty arrays if no valid images are found, instead of
+    raising, so retrain_model can treat "nothing to train on" as a normal
+    outcome instead of an error.
     """
     images = []
     labels = []
@@ -146,10 +128,6 @@ def load_and_preprocess_dataset(data_dir):
 
 
 def preprocess_raw_arrays(X_raw, y_raw):
-    """Preprocesses raw MNIST-style arrays (uint8 images, integer labels).
-
-    Returns (X, y): X is shape (n, 28, 28, 1) normalized, y is one-hot shape (n, 10).
-    """
     X = X_raw.astype("float32") / 255.0
     X = X.reshape(-1, 28, 28, 1)
     y = to_categorical(y_raw, num_classes=10)

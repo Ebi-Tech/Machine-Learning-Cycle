@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# No system deps needed for ONNX Runtime (pure Python wheel)
+# ONNX Runtime doesn't need extra system libraries like the TensorFlow image does.
 COPY requirements-render.txt .
 RUN pip install --no-cache-dir -r requirements-render.txt
 

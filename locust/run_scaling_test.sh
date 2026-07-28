@@ -20,9 +20,9 @@ RESULTS_DIR="locust/results"
 mkdir -p "$RESULTS_DIR"
 
 HOST="http://localhost:8080"
-USERS=100           # Total simulated users
-SPAWN_RATE=20       # Users spawned per second
-DURATION="60s"      # Test duration per scale level
+USERS=100
+SPAWN_RATE=20
+DURATION="60s"
 
 echo "=========================================="
 echo " Locust Scaling Comparison Test"
@@ -37,15 +37,12 @@ for SCALE in 1 2 4; do
     echo ""
     echo "---------- Scale: $SCALE container(s) ----------"
 
-    # Start/scale the containers
     echo "Starting containers at scale=$SCALE..."
     docker compose up -d --scale app=$SCALE
 
-    # Wait for all containers to be healthy and for nginx to re-resolve DNS
     echo "Waiting 15 seconds for containers to stabilize and nginx DNS to refresh..."
     sleep 15
 
-    # Verify the API is responding
     echo "Verifying API health..."
     if ! curl -s --fail "$HOST/health" > /dev/null 2>&1; then
         echo "ERROR: API not responding at $HOST/health. Aborting."
@@ -54,7 +51,6 @@ for SCALE in 1 2 4; do
     fi
     echo "API healthy. Running Locust test..."
 
-    # Run Locust in headless mode
     locust -f locust/locustfile.py \
         --host="$HOST" \
         --headless \
@@ -85,7 +81,6 @@ echo ""
 echo " Use these for the README comparison table."
 echo "=========================================="
 
-# Tear down
 echo ""
 echo "Stopping containers..."
 docker compose down

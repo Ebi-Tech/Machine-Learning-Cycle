@@ -32,7 +32,7 @@ DB_PATH = "models/uploads.db"
 TRAIN_DATA_PATH = "data/train"
 TEST_DATA_PATH = "data/test"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff"}
-MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,9 +74,8 @@ init_db()
 
 
 def _record_upload(filename, label, file_path, file_size):
-    """Inserts one row per image that lands on disk via /upload, so every
-    upload is tracked in the database in addition to the filesystem the
-    retraining pipeline actually reads from.
+    """Logs one row per uploaded image in the database, on top of saving
+    it to disk (which is what the retraining pipeline actually reads).
     """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -135,15 +134,12 @@ def _compute_and_save_eval_metrics(current_model):
 
 
 def _append_retrain_log(entry):
-    """Appends a retrain attempt (promoted or rejected) to
-    models/retrain_log.json, so /retrain-history can return a full audit
-    trail of every retraining attempt.
+    """Adds one retrain attempt to models/retrain_log.json for the
+    /retrain-history audit trail.
 
-    Under multi-replica deployment, two containers can both be handling a
-    /retrain call and writing to this same volume-mounted file at once. An
-    unlocked read-modify-write would let one write silently clobber the
-    other, so the whole read-append-write cycle holds an exclusive file
-    lock (fcntl.flock), which blocks other writers until it's released.
+    If two containers write to this file at the same time, one write can
+    silently overwrite the other. To stop that, the whole read-modify-write
+    step locks the file (fcntl.flock) until it's done.
     """
     os.makedirs(os.path.dirname(RETRAIN_LOG_PATH), exist_ok=True)
     with open(RETRAIN_LOG_PATH, "a+") as f:
@@ -178,9 +174,8 @@ def _handle_zip_upload(zip_file):
         has_digit_dirs = any(d.isdigit() for d in top_level_dirs)
 
         if not has_digit_dirs and len(top_level_dirs) == 1:
-            # Common case: someone right-clicked a folder and hit "Compress"
-            # on macOS, which wraps the 0-9 folders in a parent directory.
-            # Look one level deeper before giving up.
+            # On macOS, right-click > Compress on a folder wraps the 0-9
+            # folders in an extra parent folder. Check one level deeper.
             nested_dir = os.path.join(base_dir, top_level_dirs[0])
             nested_entries = [
                 d for d in os.listdir(nested_dir) if os.path.isdir(os.path.join(nested_dir, d))
@@ -290,7 +285,7 @@ def upload():
         if not files or all(f.filename == "" for f in files):
             return jsonify({"error": "No files uploaded."}), 400
 
-        # Bulk mode: a single .zip carries its own 0-9 subdirectory structure.
+        # A single .zip means bulk upload; it already has 0-9 folders inside.
         if len(files) == 1 and files[0].filename.lower().endswith(".zip"):
             return _handle_zip_upload(files[0])
 

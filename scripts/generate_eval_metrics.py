@@ -11,9 +11,8 @@ import numpy as np
 from tensorflow import keras
 from sklearn.metrics import classification_report, confusion_matrix
 
-# Allow running as `python scripts/generate_eval_metrics.py` from the project
-# root: Python puts this script's own directory on sys.path, not the cwd, so
-# the src package needs to be added explicitly to resolve the import below.
+# Python only puts this script's own folder on sys.path, not the project
+# root, so the src import below won't work unless we add it manually.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.preprocessing import preprocess_raw_arrays
 
@@ -31,17 +30,14 @@ def main():
 
     report = classification_report(y_true, y_pred, output_dict=True)
 
-    # Class distribution from training data. This must stay a plain list
-    # indexed by digit (not a dict), matching what app.py writes after a
-    # real retrain: the frontend's Chart.js bar charts index class_distribution
-    # and per_class_f1 positionally against a 0-9 labels array.
+    # Must stay a plain list indexed by digit (not a dict), matching what
+    # app.py writes after a retrain: the frontend's charts read
+    # class_distribution and per_class_f1 by position against a 0-9 list.
     y_train_raw = np.load("data/train/y_train.npy")
     class_distribution = [int(np.sum(y_train_raw == i)) for i in range(10)]
 
-    # Per-class F1, same positional-list format as app.py.
     per_class_f1 = [report[str(i)]["f1-score"] for i in range(10)]
 
-    # Confusion matrix as nested list
     cm = confusion_matrix(y_true, y_pred).tolist()
 
     metrics = {

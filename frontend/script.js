@@ -42,10 +42,9 @@ function switchTab(tabName) {
   if (titleEl) titleEl.textContent = TAB_TITLES[tabName];
 }
 
-// Mobile sidebar: below the lg breakpoint the sidebar collapses to an
-// icons-only rail (handled by CSS). The hamburger button expands it into
-// a full-width overlay with a backdrop; selecting a tab or tapping the
-// backdrop closes it again.
+// On small screens the sidebar shrinks to icons only (handled by CSS).
+// The hamburger button expands it into a full-width overlay with a
+// backdrop; tapping a tab or the backdrop closes it again.
 function openSidebar() {
   document.getElementById('sidebar').classList.add('sidebar-open');
   document.getElementById('sidebar-backdrop').classList.remove('hidden');
@@ -244,9 +243,8 @@ const PREDICT_TARGETS = {
   },
 };
 
-// Shows (or clears) a low-confidence warning banner above the predicted
-// digit inside the given result container. Created and removed dynamically
-// since there's no static placeholder for it in the HTML.
+// Shows or clears a low-confidence warning banner above the predicted
+// digit. Built here in JS since there's no placeholder for it in the HTML.
 function showConfidenceWarning(resultContainerId, warningText) {
   const container = document.getElementById(resultContainerId);
   const existing = container.querySelector('.confidence-warning-banner');
@@ -285,9 +283,8 @@ async function runPrediction(file, targetKey) {
     document.getElementById(t.procTime).textContent = `${data.processing_time_ms.toFixed(1)} ms`;
 
     if (data.predicted_digit === null) {
-      // Blank/no-digit image: nothing meaningful to show as a digit or a
-      // confidence percentage, and the probability bars would just be
-      // ten empty rows, so hide them and let the warning banner speak.
+      // Blank image: no digit or confidence to show, so hide the
+      // probability bars and let the warning banner explain instead.
       document.getElementById(t.digit).textContent = '-';
       document.getElementById(t.confidence).textContent = '';
       if (t.bars) {
@@ -761,5 +758,5 @@ async function fetchRetrainHistory() {
   }
 }
 
-// Build the 10 probability rows once, at load time.
+// Runs once when the page loads.
 buildProbabilityBars();

@@ -13,18 +13,16 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from src.prediction_onnx import load_onnx_model, predict_single_onnx
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
 
-# Paths
 MODEL_PATH = "models/digit_classifier.onnx"
 EVAL_METRICS_PATH = "models/eval_metrics.json"
 DB_PATH = "models/uploads.db"
-MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_PREDICT_FILE_SIZE = 10 * 1024 * 1024
 
 
 def init_db():
@@ -47,12 +45,10 @@ def init_db():
 
 init_db()
 
-# Load ONNX model at startup
 logger.info(f"Loading ONNX model from {MODEL_PATH}")
 onnx_session = load_onnx_model(MODEL_PATH)
 logger.info("ONNX model loaded successfully")
 
-# Track server start time
 SERVER_START_TIME = time.time()
 
 
@@ -77,7 +73,9 @@ def health():
             "model_path": MODEL_PATH,
             "model_last_trained": datetime.fromtimestamp(model_mtime).isoformat(),
             "uptime_seconds": round(time.time() - SERVER_START_TIME, 1),
-            "model_parameters": 242442,  # Known from model architecture
+            # Hardcoded instead of computed: loading the model just to
+            # count its params would be wasteful on every health check.
+            "model_parameters": 242442,
             "runtime": "onnxruntime",
             "deployment": "render-free-tier"
         })

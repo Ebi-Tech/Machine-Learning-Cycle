@@ -15,18 +15,9 @@ def _predict_from_array(model, image_array, confidence_threshold=0.7):
 
 
 def predict_single(model, image_bytes, confidence_threshold=0.7):
-    """Predicts a digit from raw uploaded image bytes.
-
-    Returns a dict with predicted_digit, confidence, probabilities, and
-    is_confident (True if confidence meets confidence_threshold, so the
-    caller can decide whether to warn that the input may not be a valid
-    handwritten digit).
-
-    A near-blank image (fewer than 10 of 784 pixels above 0.1 after
-    normalization) is rejected before it ever reaches the model: a CNN
-    with a softmax head doesn't have a real "nothing here" output, so an
-    empty canvas still gets classified as some digit with deceptively high
-    confidence instead of naturally producing a low one.
+    """A near-blank image is rejected before it reaches the model. The
+    model always picks some digit, even for an empty image, often with
+    high confidence, so blank images need to be caught separately.
     """
     image_array = preprocess_image(image_bytes)
 
@@ -44,9 +35,5 @@ def predict_single(model, image_bytes, confidence_threshold=0.7):
 
 
 def predict_from_path(model, image_path):
-    """Predicts a digit from an image file on disk.
-
-    Returns a dict with predicted_digit, confidence, and probabilities.
-    """
     image_array = preprocess_image_from_path(image_path)
     return _predict_from_array(model, image_array)
