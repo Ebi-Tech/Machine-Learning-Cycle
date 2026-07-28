@@ -78,7 +78,6 @@ echo "   scale_N_stats_history.csv - Stats over time"
 echo "   scale_N_failures.csv     - Failed requests"
 echo "   scale_N_output.txt       - Full Locust console output"
 echo ""
-echo " Use these for the README comparison table."
 echo "=========================================="
 
 echo ""
