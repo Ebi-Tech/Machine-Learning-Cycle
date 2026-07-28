@@ -4,7 +4,7 @@ An end-to-end machine learning pipeline for automated grading of handwritten num
 
 ## Demo & Deployment
 
-- **Video Demo:** [YouTube Link](YOUR_YOUTUBE_LINK_HERE)
+- **Video Demo:** [YouTube Link](https://youtu.be/Ka6P1m0gyf4)
 - **Live Deployment:** [https://machine-learning-cycle.onrender.com](https://machine-learning-cycle.onrender.com)
 
 > Note: The Render deployment uses ONNX Runtime for inference within the 512MB free-tier memory limit. Retraining is available only through the local Docker setup. The cloud deployment supports prediction, health monitoring, and visualizations.
